@@ -1,0 +1,80 @@
+
+
+N                = 9;           % the number of individuals
+T                = 20;          % the number of timesteps
+p                = 1;           % the number of regressors
+sigma            = 0.5;         % standard deviation of error term
+t_sparsity_level = 0.5;         % sparsity percentage w.r.t. breaks
+i_sparsity_level = 0.1;         % sparsity percentage w.r.t. individual parameters
+max_breaks       = 4;           % the maximum number of breaks per individual
+
+Gamma = zeros(N*T,p*N);
+
+rng(1);                         % set seed
+nbreaks = randi(max_breaks,N,1);% generate a random number max_breaks of breaks per individual
+nbreaks = nbreaks - 1;          % subtract 1, zero breaks is also possible
+% the 0th break happens at t=0 and the final break m+1 at t=T+1
+
+% generate locations of the -at most max_breaks- breaks
+m = zeros(N,max_breaks);
+for i = 1:N
+    m(i,1:(nbreaks(i)+2)) = [1; (sort(randperm(max_breaks-1,nbreaks(i)))'+1); T+1]';
+end
+
+% fill in parameters for the blocks between the breaks either randomly or
+% predefine something...
+% also impose sparsity both w.r.t. the breaks and individual parameters
+for i = 1:N                                 % for all individuals
+    for l = 1:(nbreaks(i)+1)                % for all breaks of individual i
+        
+        Gamma((i-1)*T+(m(i,l):(m(i,l+1)-1)),1:(p*N)) = repmat(randn(1,p*N),m(i,l+1)-m(i,l),1);
+        %for testing purposes
+        %Gamma((i-1)*T+(m(i,l):(m(i,l+1)-1)),1:(p*N)) = l;
+        
+        for j = 1:p*N                       % for every individual in the network...
+            if rand < t_sparsity_level      % there might be sparsity w.r.t. breaks
+                Gamma((i-1)*T+(m(i,l):(m(i,l+1)-1)),j) = zeros(m(i,l+1)-m(i,l),1);
+            end     
+        end
+    end
+    
+    for t = 1:T
+        for j = 1:p*N
+            if rand < i_sparsity_level      % there might be sparsity w.r.t. parameters
+                Gamma((i-1)*T+t,j) = 0;
+            end
+        end
+    end
+end
+
+
+X  = randn(T*p*N,1);        % individuals and timesteps in rows, regressors in columns      
+e  = sigma*randn(N*T,1);        
+Y = zeros(T*N,1);
+
+% for testing purposes...
+%X = ones(T*p*N,1);
+%e = zeros(T*N,1);
+%Gamma = ones(N*T,p*N);
+
+% calculate the independent variable, including the error term
+for i = 1:N
+    for t = 1:T
+        Y((i-1)*T+t) = dot(Gamma((i-1)*T+t,(1:p*N)) , X( (i-1)*T+(1:p*N),1 )' ) + e((i-1)*N+t,1);
+    end
+end
+
+% put the regressors in different columns
+R =zeros(N*T,p);
+for k = 1:p
+    R(:,k) = X(k:p:p*N*T,1);
+end
+
+year                        = repmat(1:T,1,N)';                         % time   
+code                        = kron((1:N)',ones(T,1));                   % individuals     
+idxdata                     = dataset(code, year, Y, R);        
+idxdata.Properties.VarNames = {'N'  'T'  'y'  'R'}; 
+
+
+
+
